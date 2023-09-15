@@ -12,8 +12,33 @@ local function _to_char(char)
     return vim.api.nvim_replace_termcodes(char, true, true, true)
 end
 
-local function add_cursor_visual(row, col, end_col)
-    local text = vim.api.nvim_buf_get_text(0, row, col, row, end_col, {})[1]
+local function add_normal_cursor(row, col)
+    local character = vim.api.nvim_buf_get_text(0, row, col, row, col + 1, {})[1]
+
+    if string.len(character) == 0 then
+        character = " "
+    end
+
+    vim.api.nvim_buf_set_extmark(0, cursor_namespace, row, col,
+        {
+            virt_text = { { character, "Cursor" } },
+            virt_text_pos = "overlay",
+            hl_mode = "combine",
+            priority = 1000,
+            end_col = col + 1,
+            strict = false
+        });
+
+    vim.api.nvim_win_set_cursor(0, { row + 1, col })
+end
+
+local function add_visual_cursor(row, col, end_col)
+    local text = vim.api.nvim_buf_get_text(0, row, col, row, end_col + 1, {})[1]
+
+    if string.len(text) <= end_col - col then
+        text = text .. " "
+    end
+
     local visual = text:sub(1, #text - 1)
     local cursor = text:sub(#text)
 
@@ -24,12 +49,13 @@ local function add_cursor_visual(row, col, end_col)
             hl_mode = "combine",
             priority = 1000,
             end_col = end_col,
+            strict = false,
         });
 
     vim.api.nvim_win_set_cursor(0, { row + 1, end_col - 1 })
 end
 
-local function move_cursor(id, row, col)
+local function move_normal_cursor(id, row, col)
     local character = vim.api.nvim_buf_get_text(0, row, col, row, col + 1, {})[1]
 
     if string.len(character) == 0 then
@@ -48,9 +74,13 @@ local function move_cursor(id, row, col)
         });
 end
 
-local function move_cursor_visual(id, row, col, end_col, cursor_front)
-    local text = vim.api.nvim_buf_get_text(0, row, col, row, end_col, {})[1]
+local function move_visual_cursor(id, row, col, end_col, cursor_front)
+    local text = vim.api.nvim_buf_get_text(0, row, col, row, end_col + 1, {})[1]
     local virt_text
+
+    if string.len(text) <= end_col - col then
+        text = text .. " "
+    end
 
     if cursor_front then
         local cursor = text:sub(1, 1)
@@ -74,7 +104,7 @@ local function move_cursor_visual(id, row, col, end_col, cursor_front)
         });
 end
 
-local function move_cursor_insert(id, row, col)
+local function move_insert_cursor(id, row, col)
     local character = vim.api.nvim_buf_get_text(0, row, col, row, col + 1, {})[1]
 
     if string.len(character) == 0 then
@@ -93,7 +123,7 @@ local function move_cursor_insert(id, row, col)
         });
 end
 
-local function for_each_cursor(callback)
+local function for_each_normal_cursor(callback)
     local extmarks = vim.api.nvim_buf_get_extmarks(0, cursor_namespace, 0, -1, {})
 
     for _, shadow_mark in ipairs(extmarks) do
@@ -119,7 +149,7 @@ local function for_each_visual_cursor(callback)
     end
 end
 
-local function for_each_cursor_reposition(callback)
+local function for_each_normal_cursor_reposition(callback)
     local extmarks = vim.api.nvim_buf_get_extmarks(0, cursor_namespace, 0, -1, {})
 
     for _, shadow_mark in ipairs(extmarks) do
@@ -132,7 +162,7 @@ local function for_each_cursor_reposition(callback)
         callback(cursor)
 
         local position = vim.api.nvim_win_get_cursor(0)
-        move_cursor(cursor.id, position[1] - 1, position[2])
+        move_normal_cursor(cursor.id, position[1] - 1, position[2])
     end
 end
 
@@ -156,11 +186,11 @@ local function for_each_visual_cursor_reposition(cursor_front, callback)
         local position = vim.api.nvim_win_get_cursor(0)
 
         if cursor_front then
-            move_cursor_visual(cursor.id, position[1] - 1, position[2], cursor.end_col, cursor_front)
+            move_visual_cursor(cursor.id, position[1] - 1, position[2], cursor.end_col, cursor_front)
         else
             -- FIX: very hacky and not proper
             local end_col = math.max(cursor.col, position[2])
-            move_cursor_visual(cursor.id, cursor.row, cursor.col, end_col, cursor_front)
+            move_visual_cursor(cursor.id, cursor.row, cursor.col, end_col, cursor_front)
         end
     end
 end
@@ -178,12 +208,12 @@ local function for_each_insert_cursor_reposition(callback)
         callback(cursor)
 
         local position = vim.api.nvim_win_get_cursor(0)
-        move_cursor_insert(cursor.id, position[1] - 1, position[2])
+        move_insert_cursor(cursor.id, position[1] - 1, position[2])
     end
 end
 
-local function for_each_cursor_reposition_single(command)
-    for_each_cursor_reposition(function(cursor)
+local function for_each_normal_cursor_reposition_single(command)
+    for_each_normal_cursor_reposition(function(cursor)
         vim.cmd(command)
     end)
 end
@@ -224,9 +254,9 @@ local function start_multi_insert(offset)
         -- Move cursors back one
         vim.opt_local.virtualedit = ""
 
-        for_each_cursor(function(cursor)
+        for_each_normal_cursor(function(cursor)
             local clamped_col = math.max(cursor.col - 1, 0)
-            move_cursor(cursor.id, cursor.row, clamped_col)
+            move_normal_cursor(cursor.id, cursor.row, clamped_col)
         end)
 
         vim.g.multiinsertModeExit = true
@@ -256,7 +286,7 @@ local function start_multi_insert(offset)
             elseif code == _to_char('<Home>') then
                 for_each_insert_cursor_reposition_single(_to_char("norm! <Home>"))
             elseif code == _to_char('<End>') then
-                for_each_insert_cursor_reposition_single(_to_char("norm! <End>"))
+                for_each_insert_cursor_reposition_single(_to_char("norm! g$"))
             end
         else
             local userInput = string.char(vim.g.multiinsertModeInput)
@@ -278,9 +308,9 @@ local function start_multi_insert(offset)
 
         -- Move cursors forward offset columns
         if offset ~= nil then
-            for_each_cursor(function(cursor)
+            for_each_normal_cursor(function(cursor)
                 local clamped_col = cursor.col + offset
-                move_cursor_insert(cursor.id, cursor.row, clamped_col)
+                move_insert_cursor(cursor.id, cursor.row, clamped_col)
             end)
         end
 
@@ -301,8 +331,12 @@ local function start_multi_visual(update_cursors, regex)
         vim.opt_local.virtualedit = ""
 
         -- Shrink cursors down to a single character
-        for_each_cursor(function(cursor)
-            move_cursor(cursor.id, cursor.row, cursor.col)
+        for_each_visual_cursor(function(cursor)
+            if cursor_front then
+                move_normal_cursor(cursor.id, cursor.row, cursor.col)
+            else
+                move_normal_cursor(cursor.id, cursor.row, cursor.end_col)
+            end
         end)
 
         -- Remove highlighing
@@ -335,7 +369,7 @@ local function start_multi_visual(update_cursors, regex)
                             break
                         end
 
-                        add_cursor_visual(line_num - 1, match[2], match[3])
+                        add_visual_cursor(line_num - 1, match[2], match[3] - 1)
 
                         start_offset = start_offset + match[3]
                     end
@@ -348,6 +382,7 @@ local function start_multi_visual(update_cursors, regex)
 
                 -- Sort start and end position correctly
                 -- TODO: this check is not suffisticated enough, e.g. if the selection is multi line
+                -- FIX: in general we should probably keep the correct order
                 if start_pos[3] > end_pos[3] then
                     start_pos, end_pos = end_pos, start_pos
                 end
@@ -359,8 +394,10 @@ local function start_multi_visual(update_cursors, regex)
 
                 cursor_text = selected_text
 
-                add_cursor_visual(start_pos[2] - 1, start_pos[3] - 1, end_pos[3])
+                add_visual_cursor(start_pos[2] - 1, start_pos[3] - 1, end_pos[3] - 1)
             end
+        else
+            for_each_visual_cursor_reposition_single(cursor_front, "norm! h")
         end
 
         vim.g.multivisualModeExit = false
@@ -370,8 +407,8 @@ local function start_multi_visual(update_cursors, regex)
                 local appended_text = ""
 
                 for_each_visual_cursor(function(cursor)
-                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
                     appended_text = appended_text .. text[1] .. ESC
                 end)
 
@@ -390,8 +427,8 @@ local function start_multi_visual(update_cursors, regex)
                 local appended_text = ""
 
                 for_each_visual_cursor(function(cursor)
-                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
                     appended_text = appended_text .. text[1] .. ESC
                 end)
 
@@ -410,8 +447,8 @@ local function start_multi_visual(update_cursors, regex)
                 local appended_text = ""
 
                 for_each_visual_cursor(function(cursor)
-                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
                     appended_text = appended_text .. text[1] .. ESC
                 end)
 
@@ -428,7 +465,7 @@ local function start_multi_visual(update_cursors, regex)
             -- Change selected text
             ['c'] = function()
                 for_each_visual_cursor(function(cursor)
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
                 end)
 
                 enter_insert = true
@@ -436,7 +473,7 @@ local function start_multi_visual(update_cursors, regex)
             end,
             ['s'] = function()
                 for_each_visual_cursor(function(cursor)
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
                 end)
 
                 enter_insert = true
@@ -448,7 +485,7 @@ local function start_multi_visual(update_cursors, regex)
 
                 for_each_visual_cursor(function(cursor)
                     -- FIX: handle multi line correctly
-                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
                     appended_text = appended_text .. text[1] .. ESC
                 end)
 
@@ -503,9 +540,9 @@ local function start_multi_visual(update_cursors, regex)
             ['r'] = function()
                 for_each_visual_cursor(function(cursor)
                     -- FIX: handle multi line correctly
-                    local new_text = string.rep(appended_character, cursor.end_col - cursor.col)
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, { new_text })
-                    move_cursor(cursor.id, cursor.row, cursor.col)
+                    local new_text = string.rep(appended_character, cursor.end_col + 1 - cursor.col)
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, { new_text })
+                    move_normal_cursor(cursor.id, cursor.row, cursor.col)
                 end)
 
                 Leave()
@@ -518,7 +555,7 @@ local function start_multi_visual(update_cursors, regex)
                     -- FIX: handle multi line correctly
                     local lines = vim.api.nvim_buf_get_lines(0, cursor.row, cursor.row + 1, true);
                     vim.api.nvim_buf_set_lines(0, cursor.row, cursor.row + 1, true, { "" });
-                    move_cursor(cursor.id, cursor.row, 0)
+                    move_normal_cursor(cursor.id, cursor.row, 0)
                     appended_text = appended_text .. lines[1] .. "\n" .. ESC
                 end)
 
@@ -535,7 +572,7 @@ local function start_multi_visual(update_cursors, regex)
                     -- FIX: handle multi line correctly
                     local lines = vim.api.nvim_buf_get_lines(0, cursor.row, cursor.row + 1, true);
                     vim.api.nvim_buf_set_lines(0, cursor.row, cursor.row + 1, true, { "" });
-                    move_cursor(cursor.id, cursor.row, 0)
+                    move_normal_cursor(cursor.id, cursor.row, 0)
                     appended_text = appended_text .. lines[1] .. "\n" .. ESC
                 end)
 
@@ -553,7 +590,7 @@ local function start_multi_visual(update_cursors, regex)
                     -- FIX: handle multi line correctly
                     local lines = vim.api.nvim_buf_get_lines(0, cursor.row, cursor.row + 1, true);
                     vim.api.nvim_buf_set_lines(0, cursor.row, cursor.row + 1, true, {});
-                    move_cursor(cursor.id, cursor.row, cursor.col)
+                    move_normal_cursor(cursor.id, cursor.row, cursor.col)
                     appended_text = appended_text .. lines[1] .. "\n" .. ESC
                 end)
 
@@ -569,7 +606,7 @@ local function start_multi_visual(update_cursors, regex)
                     -- FIX: handle multi line correctly
                     local lines = vim.api.nvim_buf_get_lines(0, cursor.row, cursor.row + 1, true);
                     vim.api.nvim_buf_set_lines(0, cursor.row, cursor.row + 1, true, {});
-                    move_cursor(cursor.id, cursor.row, cursor.col)
+                    move_normal_cursor(cursor.id, cursor.row, cursor.col)
                     appended_text = appended_text .. lines[1] .. "\n" .. ESC
                 end)
 
@@ -585,7 +622,7 @@ local function start_multi_visual(update_cursors, regex)
                 for_each_visual_cursor(function(cursor)
                     -- FIX: handle multi line correctly
                     local lines = vim.api.nvim_buf_get_lines(0, cursor.row, cursor.row + 1, true);
-                    move_cursor(cursor.id, cursor.row, cursor.col)
+                    move_normal_cursor(cursor.id, cursor.row, cursor.col)
                     appended_text = appended_text .. lines[1] .. "\n" .. ESC
                 end)
 
@@ -601,14 +638,14 @@ local function start_multi_visual(update_cursors, regex)
                 local current_index = 1
 
                 for_each_visual_cursor(function(cursor)
-                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
                     appended_text = appended_text .. text[1] .. ESC
 
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col,
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1,
                         { lines[current_index] })
 
                     local end_position = cursor.col + string.len(lines[current_index])
-                    move_cursor(cursor.id, cursor.row, end_position - 1)
+                    move_normal_cursor(cursor.id, cursor.row, end_position - 1)
 
                     current_index = (current_index % #lines) + 1
                 end)
@@ -624,13 +661,13 @@ local function start_multi_visual(update_cursors, regex)
                 local current_index = 1
 
                 for_each_visual_cursor(function(cursor)
-                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
 
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col,
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1,
                         { lines[current_index] })
 
                     local end_position = cursor.col + string.len(lines[current_index])
-                    move_cursor(cursor.id, cursor.row, end_position - 1)
+                    move_normal_cursor(cursor.id, cursor.row, end_position - 1)
 
                     current_index = (current_index % #lines) + 1
                 end)
@@ -641,10 +678,11 @@ local function start_multi_visual(update_cursors, regex)
             ['u'] = function()
                 for_each_visual_cursor(function(cursor)
                     -- FIX: handle multi line correctly
-                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
                     local uppercase_text = vim.fn.tolower(text[1])
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, { uppercase_text })
-                    move_cursor(cursor.id, cursor.row, cursor.col)
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1,
+                        { uppercase_text })
+                    move_normal_cursor(cursor.id, cursor.row, cursor.col - 1)
                 end)
 
                 Leave()
@@ -653,17 +691,18 @@ local function start_multi_visual(update_cursors, regex)
             ['U'] = function()
                 for_each_visual_cursor(function(cursor)
                     -- FIX: handle multi line correctly
-                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, {})
+                    local text = vim.api.nvim_buf_get_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1, {})
                     local uppercase_text = vim.fn.toupper(text[1])
-                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col, { uppercase_text })
-                    move_cursor(cursor.id, cursor.row, cursor.col)
+                    vim.api.nvim_buf_set_text(0, cursor.row, cursor.col, cursor.row, cursor.end_col + 1,
+                        { uppercase_text })
+                    move_normal_cursor(cursor.id, cursor.row, cursor.col - 1)
                 end)
 
                 Leave()
             end,
             -- Add cursor at next occurance
             ['n'] = function()
-                local cursor_position = vim.api.nvim_win_get_cursor(0);
+                local cursor_position = vim.api.nvim_win_get_cursor(0)
                 local col_offset = cursor_position[2] + 1
                 local next_lines = vim.api.nvim_buf_get_text(0, cursor_position[1] - 1, col_offset, -1, -1, {})
 
@@ -671,8 +710,8 @@ local function start_multi_visual(update_cursors, regex)
                     local position = string.find(line, cursor_text)
 
                     if position ~= nil then
-                        add_cursor_visual(cursor_position[1] + line_offset - 2, position + col_offset - 1,
-                            position + col_offset - 1 + string.len(cursor_text))
+                        add_visual_cursor(cursor_position[1] + line_offset - 2, position + col_offset - 1,
+                            position + col_offset - 2 + string.len(cursor_text))
                         return
                     end
 
@@ -681,7 +720,7 @@ local function start_multi_visual(update_cursors, regex)
             end,
             -- Move cursor to next occurence
             [' '] = function()
-                local cursor_position = vim.api.nvim_win_get_cursor(0);
+                local cursor_position = vim.api.nvim_win_get_cursor(0)
                 local col_offset = cursor_position[2] + 1
                 local next_lines = vim.api.nvim_buf_get_text(0, cursor_position[1] - 1, col_offset, -1, -1, {})
 
@@ -739,7 +778,7 @@ local function start_multi_visual(update_cursors, regex)
                 for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! <Home>"))
             end,
             [_to_char('<End>')] = function()
-                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! <End>"))
+                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! g$"))
             end,
             -- Exit the mode
             [ESC] = Leave
@@ -754,7 +793,7 @@ local function start_multi_normal(start_in_visual, regex)
     local function Leave()
         remove_cursors()
 
-        vim.wo.cursorline = old_cursorline;
+        vim.wo.cursorline = old_cursorline
 
         vim.g.multinormalModeExit = true
     end
@@ -763,12 +802,15 @@ local function start_multi_normal(start_in_visual, regex)
         vim.cmd('hi MultiMatches term=underline cterm=underline gui=underline')
 
         old_cursorline = vim.wo.cursorline
-        vim.wo.cursorline = false;
+        vim.wo.cursorline = false
 
         if start_in_visual then
             if start_multi_visual(true, regex) then
                 start_multi_insert()
             end
+        else
+            local position = vim.api.nvim_win_get_cursor(0)
+            add_normal_cursor(position[1] - 1, position[2])
         end
 
         vim.g.multinormalModeExit = false
@@ -792,46 +834,87 @@ local function start_multi_normal(start_in_visual, regex)
                 vim.cmd('normal! u')
             end,
             [_to_char('<BS>')] = function()
-                for_each_cursor_reposition_single("norm! h")
+                for_each_normal_cursor_reposition_single("norm! h")
             end,
             [_to_char('<Del>')] = function()
-                for_each_cursor_reposition_single(_to_char("norm! <Del>"))
+                for_each_normal_cursor_reposition_single(_to_char("norm! <Del>"))
             end,
             [_to_char('<Left>')] = function()
-                for_each_cursor_reposition_single(_to_char("norm! <Left>"))
+                for_each_normal_cursor_reposition_single(_to_char("norm! <Left>"))
             end,
             [_to_char('<S-Left>')] = function()
-                for_each_cursor_reposition_single(_to_char("norm! <S-Left>"))
+                for_each_normal_cursor_reposition_single(_to_char("norm! <S-Left>"))
             end,
             [_to_char('<Right>')] = function()
-                for_each_cursor_reposition_single(_to_char("norm! <Right>"))
+                for_each_normal_cursor_reposition_single(_to_char("norm! <Right>"))
             end,
             [_to_char('<S-Right>')] = function()
-                for_each_cursor_reposition_single(_to_char("norm! <S-Right>"))
+                for_each_normal_cursor_reposition_single(_to_char("norm! <S-Right>"))
             end,
             [_to_char("<Up>")] = function()
-                for_each_cursor_reposition_single(_to_char("norm! <Up>"))
+                for_each_normal_cursor_reposition_single(_to_char("norm! <Up>"))
             end,
             [_to_char("<Down>")] = function()
-                for_each_cursor_reposition_single(_to_char("norm! <Down>"))
+                for_each_normal_cursor_reposition_single(_to_char("norm! <Down>"))
+            end,
+            [_to_char('U')] = function()
+                local cursor_position = vim.api.nvim_win_get_cursor(0)
+                local current_line = cursor_position[1]
+                -- performance optimization
+                --local next = next
+
+                while true do
+                    current_line = current_line - 1
+                    local preivous_line = vim.api.nvim_buf_get_lines(0, current_line - 1, current_line, false)
+
+                    if next(preivous_line) == nil then
+                        return
+                    end
+
+                    if string.len(preivous_line[1]) >= cursor_position[2] then
+                        add_normal_cursor(current_line - 1, cursor_position[2])
+                        return
+                    end
+                end
+            end,
+            [_to_char('E')] = function()
+                local cursor_position = vim.api.nvim_win_get_cursor(0)
+                local current_line = cursor_position[1]
+                -- performance optimization
+                --local next = next
+
+                while true do
+                    local next_line = vim.api.nvim_buf_get_lines(0, current_line, current_line + 1, false)
+
+                    if next(next_line) == nil then
+                        return
+                    end
+
+                    if string.len(next_line[1]) >= cursor_position[2] then
+                        add_normal_cursor(current_line, cursor_position[2])
+                        return
+                    end
+
+                    current_line = current_line + 1
+                end
             end,
             ['e'] = function()
-                for_each_cursor_reposition_single("norm! e")
+                for_each_normal_cursor_reposition_single("norm! e")
             end,
             ['W'] = function()
-                for_each_cursor_reposition_single("norm! W")
+                for_each_normal_cursor_reposition_single("norm! W")
             end,
             [_to_char('<Home>')] = function()
-                for_each_cursor_reposition_single(_to_char("norm! <Home>"))
+                for_each_normal_cursor_reposition_single(_to_char("norm! <Home>"))
             end,
             [_to_char('<End>')] = function()
-                for_each_cursor_reposition_single(_to_char("norm! <End>"))
+                for_each_normal_cursor_reposition_single(_to_char("norm! <End>"))
             end,
             ['o'] = function()
-                for_each_cursor_reposition_single("norm! o")
+                for_each_normal_cursor_reposition_single("norm! o")
             end,
             ['O'] = function()
-                for_each_cursor_reposition_single("norm! O")
+                for_each_normal_cursor_reposition_single("norm! O")
             end,
             -- Exit the mode
             [ESC] = Leave,
