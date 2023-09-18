@@ -1,16 +1,15 @@
 local M = {}
 
-local ESC = string.char(vim.api.nvim_replace_termcodes('<Esc>', true, true, true):byte())
---local BACKSPACE = string.char(vim.api.nvim_replace_termcodes('<BS>', true, true, true):byte())
+--local k = vim.keycode
+local k = function(keycode)
+    return vim.api.nvim_replace_termcodes(keycode, true, true, true)
+end
 
+local ESC = string.char((k '<Esc>'):byte())
 local cursor_namespace = vim.api.nvim_create_namespace('multi-cursor')
 local old_cursorline
 -- TODO: remove
 local cursor_text
-
-local function _to_char(char)
-    return vim.api.nvim_replace_termcodes(char, true, true, true)
-end
 
 local function add_normal_cursor(row, col)
     local character = vim.api.nvim_buf_get_text(0, row, col, row, col + 1, {})[1]
@@ -267,26 +266,26 @@ local function start_multi_insert(offset)
         if type(vim.g.multiinsertModeInput) == "string" then
             local code = vim.g.multiinsertModeInput
 
-            if code == _to_char("<BS>") then
-                for_each_insert_cursor_reposition_single(_to_char("norm! d<Left>"))
-            elseif code == _to_char("<Del>") then
-                for_each_insert_cursor_reposition_single(_to_char("norm! <Del>"))
-            elseif code == _to_char("<Right>") then
-                for_each_insert_cursor_reposition_single(_to_char("norm! <Right>"))
-            elseif code == _to_char("<S-Right>") then
-                for_each_insert_cursor_reposition_single(_to_char("norm! <S-Right>"))
-            elseif code == _to_char("<Left>") then
-                for_each_insert_cursor_reposition_single(_to_char("norm! <Left>"))
-            elseif code == _to_char("<S-Left>") then
-                for_each_insert_cursor_reposition_single(_to_char("norm! <S-Left>"))
-            elseif code == _to_char("<Up>") then
-                for_each_insert_cursor_reposition_single(_to_char("norm! <Up>"))
-            elseif code == _to_char("<Down>") then
-                for_each_insert_cursor_reposition_single(_to_char("norm! <Down>"))
-            elseif code == _to_char('<Home>') then
-                for_each_insert_cursor_reposition_single(_to_char("norm! <Home>"))
-            elseif code == _to_char('<End>') then
-                for_each_insert_cursor_reposition_single(_to_char("norm! g$"))
+            if code == k "<BS>" then
+                for_each_insert_cursor_reposition_single(k "norm! d<Left>")
+            elseif code == k "<Del>" then
+                for_each_insert_cursor_reposition_single(k "norm! <Del>")
+            elseif code == k "<Right>" then
+                for_each_insert_cursor_reposition_single(k "norm! <Right>")
+            elseif code == k "<S-Right>" then
+                for_each_insert_cursor_reposition_single(k "norm! <S-Right>")
+            elseif code == k "<Left>" then
+                for_each_insert_cursor_reposition_single(k "norm! <Left>")
+            elseif code == k "<S-Left>" then
+                for_each_insert_cursor_reposition_single(k "norm! <S-Left>")
+            elseif code == k "<Up>" then
+                for_each_insert_cursor_reposition_single(k "norm! <Up>")
+            elseif code == k "<Down>" then
+                for_each_insert_cursor_reposition_single(k "norm! <Down>")
+            elseif code == k '<Home>' then
+                for_each_insert_cursor_reposition_single(k "norm! <Home>")
+            elseif code == k '<End>' then
+                for_each_insert_cursor_reposition_single(k "norm! g$")
             end
         else
             local userInput = string.char(vim.g.multiinsertModeInput)
@@ -443,7 +442,7 @@ local function start_multi_visual(update_cursors, regex)
                 Leave()
             end,
             -- TODO: all 3 the same
-            [_to_char("<Del>")] = function()
+            [k "<Del>"] = function()
                 local appended_text = ""
 
                 for_each_visual_cursor(function(cursor)
@@ -744,26 +743,26 @@ local function start_multi_visual(update_cursors, regex)
                 cursor_front = not cursor_front
                 for_each_visual_cursor_redraw(cursor_front)
             end,
-            [_to_char('<BS>')] = function()
+            [k '<BS>'] = function()
                 for_each_visual_cursor_reposition_single(cursor_front, "")
             end,
-            [_to_char('<Left>')] = function()
-                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! <Left>"))
+            [k '<Left>'] = function()
+                for_each_visual_cursor_reposition_single(cursor_front, k "norm! <Left>")
             end,
-            [_to_char('<S-Left>')] = function()
-                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! <S-Left>"))
+            [k '<S-Left>'] = function()
+                for_each_visual_cursor_reposition_single(cursor_front, k "norm! <S-Left>")
             end,
-            [_to_char('<Right>')] = function()
-                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! <Right>"))
+            [k '<Right>'] = function()
+                for_each_visual_cursor_reposition_single(cursor_front, k "norm! <Right>")
             end,
-            [_to_char('<S-Right>')] = function()
-                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! <S-Right>"))
+            [k '<S-Right>'] = function()
+                for_each_visual_cursor_reposition_single(cursor_front, k "norm! <S-Right>")
             end,
-            [_to_char("<Up>")] = function()
-                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! <Up>"))
+            [k "<Up>"] = function()
+                for_each_visual_cursor_reposition_single(cursor_front, k "norm! <Up>")
             end,
-            [_to_char("<Down>")] = function()
-                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! <Down>"))
+            [k "<Down>"] = function()
+                for_each_visual_cursor_reposition_single(cursor_front, k "norm! <Down>")
             end,
             ['w'] = function()
                 for_each_visual_cursor_reposition_single(cursor_front, "norm! w")
@@ -774,11 +773,11 @@ local function start_multi_visual(update_cursors, regex)
             ['e'] = function()
                 for_each_visual_cursor_reposition_single(cursor_front, "norm! e")
             end,
-            [_to_char('<Home>')] = function()
-                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! <Home>"))
+            [k '<Home>'] = function()
+                for_each_visual_cursor_reposition_single(cursor_front, k "norm! <Home>")
             end,
-            [_to_char('<End>')] = function()
-                for_each_visual_cursor_reposition_single(cursor_front, _to_char("norm! g$"))
+            [k '<End>'] = function()
+                for_each_visual_cursor_reposition_single(cursor_front, k "norm! g$")
             end,
             -- Exit the mode
             [ESC] = Leave
@@ -833,31 +832,31 @@ local function start_multi_normal(start_in_visual, regex)
             ['u'] = function()
                 vim.cmd('normal! u')
             end,
-            [_to_char('<BS>')] = function()
+            [k '<BS>'] = function()
                 for_each_normal_cursor_reposition_single("norm! h")
             end,
-            [_to_char('<Del>')] = function()
-                for_each_normal_cursor_reposition_single(_to_char("norm! <Del>"))
+            [k '<Del>'] = function()
+                for_each_normal_cursor_reposition_single(k "norm! <Del>")
             end,
-            [_to_char('<Left>')] = function()
-                for_each_normal_cursor_reposition_single(_to_char("norm! <Left>"))
+            [k '<Left>'] = function()
+                for_each_normal_cursor_reposition_single(k "norm! <Left>")
             end,
-            [_to_char('<S-Left>')] = function()
-                for_each_normal_cursor_reposition_single(_to_char("norm! <S-Left>"))
+            [k '<S-Left>'] = function()
+                for_each_normal_cursor_reposition_single(k "norm! <S-Left>")
             end,
-            [_to_char('<Right>')] = function()
-                for_each_normal_cursor_reposition_single(_to_char("norm! <Right>"))
+            [k '<Right>'] = function()
+                for_each_normal_cursor_reposition_single(k "norm! <Right>")
             end,
-            [_to_char('<S-Right>')] = function()
-                for_each_normal_cursor_reposition_single(_to_char("norm! <S-Right>"))
+            [k '<S-Right>'] = function()
+                for_each_normal_cursor_reposition_single(k "norm! <S-Right>")
             end,
-            [_to_char("<Up>")] = function()
-                for_each_normal_cursor_reposition_single(_to_char("norm! <Up>"))
+            [k "<Up>"] = function()
+                for_each_normal_cursor_reposition_single(k "norm! <Up>")
             end,
-            [_to_char("<Down>")] = function()
-                for_each_normal_cursor_reposition_single(_to_char("norm! <Down>"))
+            [k "<Down>"] = function()
+                for_each_normal_cursor_reposition_single(k "norm! <Down>")
             end,
-            [_to_char('U')] = function()
+            [k 'U'] = function()
                 local cursor_position = vim.api.nvim_win_get_cursor(0)
                 local current_line = cursor_position[1]
                 -- performance optimization
@@ -877,7 +876,7 @@ local function start_multi_normal(start_in_visual, regex)
                     end
                 end
             end,
-            [_to_char('E')] = function()
+            [k 'E'] = function()
                 local cursor_position = vim.api.nvim_win_get_cursor(0)
                 local current_line = cursor_position[1]
                 -- performance optimization
@@ -904,11 +903,11 @@ local function start_multi_normal(start_in_visual, regex)
             ['W'] = function()
                 for_each_normal_cursor_reposition_single("norm! W")
             end,
-            [_to_char('<Home>')] = function()
-                for_each_normal_cursor_reposition_single(_to_char("norm! <Home>"))
+            [k '<Home>'] = function()
+                for_each_normal_cursor_reposition_single(k "norm! <Home>")
             end,
-            [_to_char('<End>')] = function()
-                for_each_normal_cursor_reposition_single(_to_char("norm! <End>"))
+            [k '<End>'] = function()
+                for_each_normal_cursor_reposition_single(k "norm! <End>")
             end,
             ['o'] = function()
                 for_each_normal_cursor_reposition_single("norm! o")
