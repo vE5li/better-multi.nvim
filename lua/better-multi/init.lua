@@ -491,6 +491,7 @@ local function start_multi_visual(update_cursors, regex)
                 -- Save to clipboard
                 vim.fn.setreg("+", appended_text)
 
+                cursor_front = true
                 Leave()
             end,
             -- Move line to the right
@@ -544,6 +545,7 @@ local function start_multi_visual(update_cursors, regex)
                     move_normal_cursor(cursor.id, cursor.row, cursor.col)
                 end)
 
+                cursor_front = true
                 Leave()
             end,
             -- Delete entire line text and go into insert mode
@@ -621,13 +623,14 @@ local function start_multi_visual(update_cursors, regex)
                 for_each_visual_cursor(function(cursor)
                     -- FIX: handle multi line correctly
                     local lines = vim.api.nvim_buf_get_lines(0, cursor.row, cursor.row + 1, true);
-                    move_normal_cursor(cursor.id, cursor.row, cursor.col)
+                    move_normal_cursor(cursor.id, cursor.row, 0)
                     appended_text = appended_text .. lines[1] .. "\n" .. ESC
                 end)
 
                 -- Save to clipboard
                 vim.fn.setreg("+", appended_text)
 
+                cursor_front = true
                 Leave()
             end,
             -- Put text in clipboard to seletcion and copy the old text to the clipboard
