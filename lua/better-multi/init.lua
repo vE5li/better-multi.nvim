@@ -709,7 +709,7 @@ local function start_multi_visual(update_cursors, regex)
                 local next_lines = vim.api.nvim_buf_get_text(0, cursor_position[1] - 1, col_offset, -1, -1, {})
 
                 for line_offset, line in ipairs(next_lines) do
-                    local position = string.find(line, cursor_text)
+                    local position = string.find(line, cursor_text, 1, true)
 
                     if position ~= nil then
                         add_visual_cursor(cursor_position[1] + line_offset - 2, position + col_offset - 1,
@@ -727,7 +727,7 @@ local function start_multi_visual(update_cursors, regex)
                 local next_lines = vim.api.nvim_buf_get_text(0, cursor_position[1] - 1, col_offset, -1, -1, {})
 
                 for line_offset, line in ipairs(next_lines) do
-                    local position = string.find(line, cursor_text)
+                    local position = string.find(line, cursor_text, 1, true)
 
                     if position ~= nil then
                         vim.api.nvim_win_set_cursor(0,
