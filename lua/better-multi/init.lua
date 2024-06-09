@@ -7,9 +7,35 @@ end
 
 local ESC = string.char((k '<Esc>'):byte())
 local cursor_namespace = vim.api.nvim_create_namespace('multi-cursor')
+local real_cursor_namespace = vim.api.nvim_create_namespace('real-multi-cursor')
 local old_cursorline
 -- TODO: remove
 local cursor_text
+
+local function add_real_cursor(row, col)
+    local character = vim.api.nvim_buf_get_text(0, row, col, row, col + 1, {})[1]
+
+    if string.len(character) == 0 then
+        character = " "
+    end
+
+    vim.api.nvim_buf_set_extmark(0, real_cursor_namespace, row, col,
+        {
+            virt_text = { { character, "RealSpaceCursor" } },
+            virt_text_pos = "overlay",
+            hl_mode = "combine",
+            priority = 1000,
+            end_col = col + 1,
+            strict = false
+        });
+end
+
+local function remove_real_cursor()
+    local extmarks = vim.api.nvim_buf_get_extmarks(0, real_cursor_namespace, 0, -1, {})
+
+    vim.api.nvim_win_set_cursor(0, { extmarks[1][2] + 1, extmarks[1][3] })
+    vim.api.nvim_buf_clear_namespace(0, real_cursor_namespace, 0, -1)
+end
 
 local function add_normal_cursor(row, col)
     local character = vim.api.nvim_buf_get_text(0, row, col, row, col + 1, {})[1]
@@ -20,7 +46,7 @@ local function add_normal_cursor(row, col)
 
     vim.api.nvim_buf_set_extmark(0, cursor_namespace, row, col,
         {
-            virt_text = { { character, "Cursor" } },
+            virt_text = { { character, "AlternateSpaceCursor" } },
             virt_text_pos = "overlay",
             hl_mode = "combine",
             priority = 1000,
@@ -43,7 +69,7 @@ local function add_visual_cursor(row, col, end_col)
 
     vim.api.nvim_buf_set_extmark(0, cursor_namespace, row, col,
         {
-            virt_text = { { visual, "Visual" }, { cursor, "Cursor" } },
+            virt_text = { { visual, "Visual" }, { cursor, "AlternateSpaceCursor" } },
             virt_text_pos = "overlay",
             hl_mode = "combine",
             priority = 1000,
@@ -64,7 +90,7 @@ local function move_normal_cursor(id, row, col)
     vim.api.nvim_buf_set_extmark(0, cursor_namespace, row, col,
         {
             id = id,
-            virt_text = { { character, "Cursor" } },
+            virt_text = { { character, "AlternateSpaceCursor" } },
             virt_text_pos = "overlay",
             hl_mode = "combine",
             priority = 1000,
@@ -88,7 +114,7 @@ local function move_visual_cursor(id, row, col, end_col, cursor_front)
     else
         local visual = text:sub(1, #text - 1)
         local cursor = text:sub(#text)
-        virt_text = { { visual, "Visual" }, { cursor, "Cursor" } }
+        virt_text = { { visual, "Visual" }, { cursor, "AlternateSpaceCursor" } }
     end
 
     vim.api.nvim_buf_set_extmark(0, cursor_namespace, row, col,
@@ -113,7 +139,7 @@ local function move_insert_cursor(id, row, col)
     vim.api.nvim_buf_set_extmark(0, cursor_namespace, row, col,
         {
             id = id,
-            virt_text = { { character, "Cursor" } },
+            virt_text = { { character, "AlternateSpaceCursor" } },
             virt_text_pos = "overlay",
             hl_mode = "combine",
             priority = 1000,
@@ -793,27 +819,34 @@ end
 
 local function start_multi_normal(start_in_visual, regex)
     local function Leave()
-        remove_cursors()
+        vim.cmd('hi AlternateSpaceCursor term=inverse guibg=green')
 
         vim.wo.cursorline = old_cursorline
+
+        remove_real_cursor()
 
         vim.g.multinormalModeExit = true
     end
 
     local function Enter()
         vim.cmd('hi MultiMatches term=underline cterm=underline gui=underline')
+        vim.cmd('hi! link AlternateSpaceCursor Cursor')
+        vim.cmd('hi RealSpaceCursor term=inverse guibg=green')
 
         old_cursorline = vim.wo.cursorline
         vim.wo.cursorline = false
+
+        local real_position = vim.api.nvim_win_get_cursor(0)
+        add_real_cursor(real_position[1] - 1, real_position[2])
 
         if start_in_visual then
             if start_multi_visual(true, regex) then
                 start_multi_insert()
             end
-        else
-            local position = vim.api.nvim_win_get_cursor(0)
-            add_normal_cursor(position[1] - 1, position[2])
         end
+        --     local position = vim.api.nvim_win_get_cursor(0)
+        --     add_normal_cursor(position[1] - 1, position[2])
+        -- end
 
         vim.g.multinormalModeExit = false
         require('libmodal').mode.enter('MultiNormal', {
@@ -927,6 +960,17 @@ local function start_multi_normal(start_in_visual, regex)
 end
 
 M.setup = function()
+    vim.cmd('hi AlternateSpaceCursor term=inverse guibg=green')
+
+    vim.api.nvim_create_user_command("MultiAddCursor", function()
+            local position = vim.api.nvim_win_get_cursor(0)
+            add_normal_cursor(position[1] - 1, position[2])
+        end,
+        { desc = "TODO", force = false })
+
+    vim.api.nvim_create_user_command("MultiRemoveCursors", function() remove_cursors() end,
+        { desc = "TODO", force = false })
+
     vim.api.nvim_create_user_command("MultiNormalMode", function() start_multi_normal(false) end,
         { desc = "go into multi normal mode", force = false })
     vim.api.nvim_create_user_command("MultiVisualMode", function() start_multi_normal(true) end,
